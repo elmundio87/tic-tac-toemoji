@@ -1,0 +1,1 @@
+set PORT=3001 && nodemon node start

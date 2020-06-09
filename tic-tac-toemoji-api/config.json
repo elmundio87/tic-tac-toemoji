@@ -1,0 +1,9 @@
+{
+  "mariadb": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "tic-tac-toemoji",
+    "password": "password",
+    "database": "tic-tac-toemoji"
+  }
+}

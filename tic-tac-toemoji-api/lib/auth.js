@@ -1,14 +1,14 @@
 'use strict';
-var CONFIG = require('../config.json');
 var crypto = require('crypto');
-var mariadb = require('mariadb');
+
+const getRandomInt = (max) => {
+  return Math.floor(Math.random() * Math.floor(max));
+}
 
 const createSalt = (length) => {
-  let salt = crypto.randomBytes(Math.ceil(length/2))
-            .toString('hex') /** convert to hexadecimal format */
-            .slice(0,length);   /** return required number of characters */
-
-  return salt;
+  return crypto.randomBytes(Math.ceil(length/2))
+                          .toString('hex') /** convert to hexadecimal format */
+                          .slice(0,length);   /** return required number of characters */
 }
 
 const getSaltedHash = (password, salt) => {
@@ -19,67 +19,32 @@ const getSaltedHash = (password, salt) => {
 }
 
 const fetchHashAndSalt = async (username) => {
-  const pool = mariadb.createPool(CONFIG.mariadb);
 
-    let rows;
-    let output = {
-      "error": null,
-      "result": null
-    }
+    let sql_query_result;
+    let result
 
-    let conn;
     try {
-      conn = await pool.getConnection();
-      rows = await conn.query("SELECT password_hash, password_salt from users WHERE username = ?", [username]);
-      if(rows.length > 0){
-        output.result = {
-          password_hash: rows[0].password_hash,
-          password_salt: rows[0].password_salt
-        }
-      } else {
-        output.error = `Username '${username}' is not registered`
+      sql_query_result = await common.sqlQuery("SELECT password_hash, password_salt from users WHERE username = ?", [username]);
+    } catch (error) {
+      throw error
+    }
+
+    if(sql_query_result.length > 0){
+      result =  {
+        password_hash: sql_query_result[0].password_hash,
+        password_salt: sql_query_result[0].password_salt
       }
-    } catch (err) {
-      output.error = err
-    } finally {
-    if (conn){
-      conn.end();
-    }
-    return output;
+    } else {
+      throw `Username '${username}' is not registered`
     }
 
-}
+    return result;
 
-const saltedHashMatchesPassword = (password, salted_hash, salt) => {
-  let temp_salted_hash
-  try{
-    temp_salted_hash = getSaltedHash(password, salt)
-  } catch (err) {
-    return {
-      "error": err,
-      "result": null
-    }
-  }
-  return {
-    "error": null,
-    "result": temp_salted_hash == salted_hash
-  }
 }
 
 const validateCredentials = async (username, password) => {
-  let result;
   let credentials = await fetchHashAndSalt(username);
-  let output = {
-    "error": null,
-    "result": false
-  }
-
-  if(credentials.error){
-    return credentials
-  }
-
-  output.result = saltedHashMatchesPassword(password, credentials.result.password_hash, credentials.result.password_salt).result;
-  return output;
+  return credentials.password_hash == getSaltedHash(password, credentials.password_salt);
 }
 
 const validEmail = (email) => {
@@ -90,162 +55,106 @@ const validEmail = (email) => {
 const createUser = async (username, password, email) => {
   let salt = createSalt(255);
   let password_hash = await getSaltedHash(password, salt);
-  let sql_result;
-  let error;
-  let user_created = false;
-  const pool = mariadb.createPool(CONFIG.mariadb);
-
-  let output = {
-    "error": null,
-    "result": null
-  }
 
   if(!validEmail(email)){
-    output.error = `${email} is not a valid email address`
-    return output
+    throw `${email} is not a valid email address`;
   }
 
-  let conn;
-  try {
-    conn = await pool.getConnection();
-    sql_result = await conn.query("INSERT INTO users (username, email, password_hash, password_salt) VALUES(?,?,?,?)", [username, email, password_hash, salt]);
-    user_created = true;
+  try{
+    await common.sqlQuery("INSERT INTO users (username, email, password_hash, password_salt) VALUES(?,?,?,?)", [username, email, password_hash, salt]);
   } catch (err) {
-    error = err;
-    output.error = err
-  } finally {
-  if (conn){
-    conn.end();
-    output.result = {
-      "sql_result": sql_result,
-      "user_created": user_created,
-    }
-
-    }
-    return output;
+    throw err;
   }
+
+  return true;
+
 };
 
 const createSession = async (username) => {
 
-  let error;
-
-  const pool = mariadb.createPool(CONFIG.mariadb);
-
-  let output = {
-    "error": null,
-    "result": null
-  }
-
   let session_id = await newSessionID();
-
-  let conn;
-  try {
-    conn = await pool.getConnection();
-    let user_id_result = await conn.query("SELECT id FROM users WHERE username = ?", [username]);
-    let user_id = user_id_result[0].id;
-    await conn.query("INSERT INTO user_sessions (session_id, user_id) VALUES(?,?)", [session_id, user_id]);
+  console.log(session_id);
+  let user_id;
+  try{
+    user_id = (await common.sqlQuery("SELECT id from users WHERE username = ?", [username]))[0].id;
   } catch (err) {
-    output.error = err
-  } finally {
-  if (conn){
-    conn.end();
-    output.result = {
-      "session_id": session_id
-    }
-
-    }
-    return output;
+    throw (err);
   }
+
+  try {
+    await common.sqlQuery("INSERT INTO user_sessions (session_id, user_id) VALUES(?,?)", [session_id, user_id]);
+  } catch (err) {
+    throw(err);
+  }
+
+  return session_id;
+
 };
 
-const getRandomInt = (max) => {
-  return Math.floor(Math.random() * Math.floor(max));
-}
 
 const getUserIdForSessionId = async (session_id) => {
 
-  let output = {
-    "error": null,
-    "result": null
-  }
+  let result;
 
-  const pool = mariadb.createPool(CONFIG.mariadb);
-  let conn;
   try {
-    conn = await pool.getConnection();
-    let result = await conn.query("SELECT * FROM user_sessions WHERE session_id = ?", [session_id]);
-    if(result.length > 0){
-      output.result = {"user_id": result[0].user_id}
+    let sql_result = await common.sqlQuery("SELECT * FROM user_sessions WHERE session_id = ?", [session_id]);
+    if(sql_result.length > 0){
+      result = sql_result[0].user_id
+    } else {
+      return null
     }
   } catch (err) {
-    error = err;
-    output.error = err
-  } finally {
-  if (conn){
-    conn.end();
-    }
-    return output;
+    throw err;
   }
+  return result;
+
 }
 
 const getUserDetails = async (session_id) => {
-  let output = {
-    "error": null,
-    "result": null
-  }
 
-  let user_id = (await getUserIdForSessionId(session_id)).result.user_id
+  let result;
 
-  const pool = mariadb.createPool(CONFIG.mariadb);
-  let conn;
   try {
-    conn = await pool.getConnection();
-    let result = await conn.query("SELECT username,email FROM users WHERE id = ?", [user_id]);
-    output.result = result[0]
+    let user_id = await getUserIdForSessionId(session_id);
+    let sql_result = await common.sqlQuery("SELECT username,email,record FROM users WHERE id = ?", [user_id]);
+    result = sql_result[0];
   } catch (err) {
-    error = err;
-    output.error = err
-  } finally {
-  if (conn){
-    conn.end();
-    }
-    return output;
+    throw err;
   }
+
+  return result;
+
 }
 
 const sessionIdExists = async (session_id) =>{
-  let output = {
-    "error": null,
-    "result": null
-  }
 
-  const pool = mariadb.createPool(CONFIG.mariadb);
-  let conn;
+  let result;
+
   try {
-    conn = await pool.getConnection();
-    let result = await conn.query("SELECT * FROM user_sessions WHERE session_id = ?", [session_id]);
-    output.result = (result.length > 0)
+    let sql_result = await common.sqlQuery("SELECT * FROM user_sessions WHERE session_id = ?", [session_id]);
+    result = (sql_result.length > 0);
   } catch (err) {
-    error = err;
-    output.error = err
-  } finally {
-  if (conn){
-    conn.end();
-    }
-    return output;
+    throw err;
   }
+  return result;
+
 }
 
 const newSessionID = async() => {
-  let session_id;
+  const INT_MAX=2147483647;
 
-  while (true) {
-    session_id = getRandomInt(2147483647);
-    if (await getUserIdForSessionId(session_id).result == null) {
+  let session_id;
+  let i = 0;
+  while (i <= 100) {
+
+    session_id = getRandomInt(INT_MAX);
+    console.log(session_id);
+    if (await getUserIdForSessionId(session_id) === null) {
         break;
     }
+    i++;
   }
+
   return session_id;
 
 }

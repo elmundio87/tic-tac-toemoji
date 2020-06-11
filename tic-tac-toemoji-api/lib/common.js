@@ -1,20 +1,19 @@
 const CONFIG = require('../config.json')
 var mariadb = require('mariadb')
 
+const pool = mariadb.createPool(CONFIG.mariadb)
+
 const validateParameters = (params, body) => {
-  let result = true
   params.forEach(param => {
     if (!(param in body)) {
-      result = false
+      throw new PublicError(`Mandatory parameters: ${params}`, 400)
     }
   })
-  return result
 }
 
 const sqlQuery = async (query, parameters) => {
   let result
 
-  const pool = mariadb.createPool(CONFIG.mariadb)
   let conn
   try {
     conn = await pool.getConnection()
@@ -28,7 +27,16 @@ const sqlQuery = async (query, parameters) => {
   return result
 }
 
+class PublicError extends Error {
+  constructor (message, code = 500) {
+    super(message)
+    this.name = 'PublicError'
+    this.code = code
+  }
+}
+
 module.exports = {
   validateParameters,
-  sqlQuery
+  sqlQuery,
+  PublicError
 }

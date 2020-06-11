@@ -1,6 +1,6 @@
 'use strict'
 var crypto = require('crypto')
-var common = require('../lib/common')
+var common = require('./common')
 
 const getRandomInt = (max) => {
   return Math.floor(Math.random() * Math.floor(max))
@@ -29,7 +29,7 @@ const fetchHashAndSalt = async (username) => {
       password_salt: sqlQueryResult[0].password_salt
     }
   } else {
-    throw new Error(`Username '${username}' is not registered`)
+    throw new common.PublicError(`Username '${username}' is not registered`, 401)
   }
 
   return result
@@ -50,12 +50,17 @@ const createUser = async (username, password, email) => {
   const passwordHash = await getSaltedHash(password, salt)
 
   if (!validEmail(email)) {
-    throw new Error(`${email} is not a valid email address`)
+    throw new common.PublicError(`${email} is not a valid email address`)
+  }
+  if ((await common.sqlQuery('SELECT username FROM users WHERE username = ?', [username])).length > 0) {
+    throw new common.PublicError(`A user is already registered with username: ${username}`)
+  } else if ((await common.sqlQuery('SELECT email FROM users WHERE email = ?', [email])).length > 0) {
+    throw new common.PublicError(`A user is already registered with email: ${email}`)
+  } else {
+    await common.sqlQuery('INSERT INTO users (username, email, password_hash, password_salt) VALUES(?,?,?,?)', [username, email, passwordHash, salt])
   }
 
-  await common.sqlQuery('INSERT INTO users (username, email, password_hash, password_salt) VALUES(?,?,?,?)', [username, email, passwordHash, salt])
-
-  return true
+  return { result: 'success' }
 }
 
 const createSession = async (username) => {
@@ -90,25 +95,46 @@ const sessionIdExists = async (sessionId) => {
 }
 
 const newSessionID = async () => {
+  const maximumAttempts = 100
   const INT_MAX = 2147483647
+  const sessionIdList = await common.sqlQuery('SELECT session_id FROM user_sessions')
   let sessionId
   let i = 0
-  while (i <= 100) {
+  while (i <= maximumAttempts) {
     sessionId = getRandomInt(INT_MAX)
     console.log(sessionId)
-    if (await getUserIdForSessionId(sessionId) === null) {
+    if (!(sessionId in sessionIdList)) {
       break
     }
     i++
   }
 
+  if (sessionId === null) {
+    throw Error(`Unable to generate a new session ID after ${maximumAttempts} attempts`)
+  }
+
   return sessionId
 }
 
+const enforceAuth = async (req, next, closure) => {
+  const sessionId = req.cookies.session_id
+  if (sessionId === undefined) {
+    throw new common.PublicError('Unauthorized - no session cookie', 401)
+  } else {
+    if (!(await sessionIdExists(sessionId))) {
+      throw new common.PublicError('Unauthorized - invalid session cookie', 401)
+    } else {
+      closure(sessionId)
+    }
+  }
+}
+
 module.exports = {
+  getUserIdForSessionId,
   validateCredentials,
   createUser,
   createSession,
   getUserDetails,
-  sessionIdExists
+  sessionIdExists,
+  enforceAuth
 }

@@ -116,7 +116,7 @@ const newSessionID = async () => {
   return sessionId
 }
 
-const enforceAuth = async (req, next, closure) => {
+const enforceAuth = async (req) => {
   const sessionId = req.cookies.session_id
   if (sessionId === undefined) {
     throw new common.PublicError('Unauthorized - no session cookie', 401)
@@ -124,7 +124,7 @@ const enforceAuth = async (req, next, closure) => {
     if (!(await sessionIdExists(sessionId))) {
       throw new common.PublicError('Unauthorized - invalid session cookie', 401)
     } else {
-      closure(sessionId)
+      return sessionId
     }
   }
 }

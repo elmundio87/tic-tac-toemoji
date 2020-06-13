@@ -10,13 +10,8 @@ router.get('/', async function (req, res, next) {
 
 router.post('/new', async function (req, res, next) {
   try {
-    auth.enforceAuth(req, next, async (sessionId) => {
-      try {
-        res.json(await games.newGame(sessionId))
-      } catch (err) {
-        next(err)
-      }
-    })
+    const sessionId = auth.enforceAuth(req)
+    games.newGame(sessionId)
   } catch (err) {
     next(err)
   }
@@ -24,13 +19,8 @@ router.post('/new', async function (req, res, next) {
 
 router.post('/join', async function (req, res, next) {
   try {
-    auth.enforceAuth(req, next, async (sessionId) => {
-      try {
-        res.json(await games.joinGame(req.body.gameLabel, sessionId))
-      } catch (err) {
-        next(err)
-      }
-    })
+    const sessionId = auth.enforceAuth(req)
+    res.json(await games.joinGame(req.body.gameLabel, sessionId))
   } catch (err) {
     next(err)
   }

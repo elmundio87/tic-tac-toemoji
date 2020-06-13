@@ -7,10 +7,9 @@ const common = require('../lib/common')
 /* GET users listing. */
 router.get('/', async function (req, res, next) {
   try {
-    auth.enforceAuth(req, async (sessionId) => {
+    const sessionId = auth.enforceAuth(req)
       const userDetails = await auth.getUserDetails(sessionId)
       res.json(userDetails)
-    })
   } catch (err) {
     next(err)
   }

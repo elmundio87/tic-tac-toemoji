@@ -102,7 +102,6 @@ const newSessionID = async () => {
   let i = 0
   while (i <= maximumAttempts) {
     sessionId = getRandomInt(INT_MAX)
-    console.log(sessionId)
     if (!(sessionId in sessionIdList)) {
       break
     }

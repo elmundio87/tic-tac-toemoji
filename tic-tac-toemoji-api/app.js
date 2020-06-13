@@ -41,7 +41,7 @@ app.use(function (err, req, res, next) {
     res.status(err.code).send(err.message)
   } else {
     if (config.debug) {
-      res.render('error', { message: err.message, status: 500, stack: err.stack })
+      res.status(err.status || 500).render('error', { message: err.message, status: 500, stack: err.stack })
     } else {
       res.status(500).send('Internal Server Error')
     }

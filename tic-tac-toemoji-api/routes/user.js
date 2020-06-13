@@ -8,8 +8,8 @@ const common = require('../lib/common')
 router.get('/', async function (req, res, next) {
   try {
     const sessionId = auth.enforceAuth(req)
-      const userDetails = await auth.getUserDetails(sessionId)
-      res.json(userDetails)
+    const userDetails = await auth.getUserDetails(sessionId)
+    res.json(userDetails)
   } catch (err) {
     next(err)
   }
@@ -52,7 +52,11 @@ router.post('/create', async function (req, res, next) {
 })
 
 router.get('/highscore', async function (req, res, next) {
-  res.json([])
+  try {
+    res.json(await common.sqlQuery('SELECT username, win FROM users ORDER BY win DESC LIMIT 10'))
+  } catch (err) {
+    next(err)
+  }
 })
 
 module.exports = router

@@ -2,7 +2,7 @@ const common = require('./common')
 const auth = require('./auth')
 const randomstring = require('randomstring')
 
-const valMap = {
+const playersMap = {
   player1: 1,
   player2: 2
 }
@@ -83,7 +83,7 @@ const updateGame = async (gameLabel, sessionId, move) => {
   if (userId === currentPlayer) {
     const board = state.board
     if (board[move.x][move.y] === 0) {
-      board[move.x][move.y] = valMap[turn]
+      board[move.x][move.y] = playersMap[turn]
       const newState = {
         turn: getNextPlayer(turn),
         board: board
@@ -98,10 +98,52 @@ const updateGame = async (gameLabel, sessionId, move) => {
   }
 }
 
+const checkSquare = (board, square, player) => {
+  return board[square[0]][square[1]] === playersMap[player]
+}
+
+const checkCombo = (board, combo, player, winningPlayer) => {
+  if (checkSquare(board, combo[0], player) &&
+    checkSquare(board, combo[1], player) &&
+    checkSquare(board, combo[2], player) &&
+    winningPlayer === null) {
+    winningPlayer = player
+  }
+  return winningPlayer
+}
+
+const checkWinner = (board) => {
+  const winningPlacements = [
+    [[0, 0], [0, 1], [0, 2]], // top horizontal
+    [[1, 0], [1, 1], [1, 2]], // middle horizontal
+    [[2, 0], [2, 1], [2, 2]], // bottom horizontal
+    [[0, 0], [1, 0], [2, 0]], // left vertical
+    [[0, 1], [1, 1], [2, 1]], // middle vertical
+    [[0, 2], [1, 2], [2, 2]], // right vertical
+    [[0, 0], [1, 1], [2, 2]], // top/left to bottom/right diagonal
+    [[2, 0], [1, 1], [0, 2]] // bottom/left to top/right diagonal
+  ]
+
+  let winningPlayer = null
+
+  const playersArr = Object.keys(playersMap)
+  playersArr.forEach(player => {
+    winningPlacements.forEach(combo => {
+      winningPlayer = checkCombo(board, combo, player, winningPlayer)
+    })
+  })
+  if (!(board[0].includes(0) || board[1].includes(0) || board[2].includes(0)) &&
+        winningPlayer === null) {
+    winningPlayer = 'draw'
+  }
+  return winningPlayer
+}
+
 module.exports = {
   listAllGames,
   newGame,
   joinGame,
   getGame,
-  updateGame
+  updateGame,
+  checkWinner
 }
